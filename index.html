@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bananagrams Word Checker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>Bananagrams Word Checker</h1>
+    <p class="sub">Validates against a Scrabble-style word list and finds every legal word you can build from your letters.</p>
+
+    <div class="input-row">
+      <input id="letters" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+             placeholder="enter letters (e.g. RETAIN)" />
+      <button id="check" disabled>Loading dictionary...</button>
+    </div>
+
+    <section id="status" class="status"></section>
+
+    <section id="verdict" class="verdict hidden"></section>
+
+    <section id="results" class="results hidden">
+      <div class="results-summary"></div>
+      <div class="anagram-block">
+        <h2>Full anagrams <span class="muted">(uses all letters)</span></h2>
+        <div class="words" data-group="full"></div>
+      </div>
+      <div class="anagram-block">
+        <h2>Sub-anagrams <span class="muted">(any subset of letters)</span></h2>
+        <div class="length-groups" data-group="sub"></div>
+      </div>
+    </section>
+
+    <footer>
+      <p class="muted small">
+        Word list: ~279k words (Collins/SOWPODS-derived superset that includes all TWL Scrabble words).
+        See the README on the repo for how to swap in a different list.
+      </p>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
