@@ -1,14 +1,14 @@
 "use strict";
 
 // Bump when any cached file changes
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const CACHE_NAME = `bananagrams-${CACHE_VERSION}`;
 
 const PRECACHE = [
   "./",
   "./index.html",
-  "./styles.css?v=5",
-  "./app.js?v=5",
+  "./styles.css?v=6",
+  "./app.js?v=6",
   "./worker.js",
   "./words.txt",
   "./fonts/ibm-plex-mono-400-latin.woff2",

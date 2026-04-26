@@ -12,70 +12,67 @@ const els = {
   subBox: document.querySelector('[data-group="sub"]'),
 };
 
-const DEFN_CACHE = new Map(); // word -> { state: "loading"|"ok"|"missing"|"error", payload }
+const DEFN_CACHE = new Map();
 
-let DICT = null;          // Set<string>
-let WORDS_BY_KEY = null;  // Map<sortedLetters, string[]>  -- for fast full-anagram lookup
-let WORDS_LIST = null;    // string[] -- for sub-anagram scan
+let WORKER = null;
+let WORKER_READY = false;
+let MSG_ID = 0;
+const PENDING = new Map(); // id -> { resolve, reject }
+
+// inline-fallback state when no worker is available
+let DICT = null;
+let WORDS_BY_KEY = null;
+let WORDS_LIST = null;
+
+function clean(s) {
+  return s.toLowerCase().replace(/[^a-z]/g, "");
+}
 
 function sortedKey(s) {
   return s.split("").sort().join("");
 }
 
-function letterCounts(s) {
-  const c = new Array(26).fill(0);
-  for (let i = 0; i < s.length; i++) {
-    const code = s.charCodeAt(i) - 97;
-    if (code >= 0 && code < 26) c[code]++;
-  }
-  return c;
-}
-
-// returns true if `word`'s letters are a multiset subset of `pool` counts
-function fitsInPool(word, pool) {
-  const c = new Array(26).fill(0);
-  for (let i = 0; i < word.length; i++) {
-    const code = word.charCodeAt(i) - 97;
-    if (code < 0 || code > 25) return false;
-    c[code]++;
-    if (c[code] > pool[code]) return false;
-  }
-  return true;
-}
-
-function loadDict() {
-  els.status.textContent = "loading dictionary…";
+function send(type, payload) {
   return new Promise((resolve, reject) => {
-    let worker;
-    try {
-      worker = new Worker("worker.js");
-    } catch (err) {
-      // Fallback: fetch+parse on main thread (older browsers / strict CSP)
-      return fetchAndParseInline().then(resolve, reject);
-    }
-    worker.onmessage = (e) => {
-      const msg = e.data;
-      if (msg.type === "ready") {
-        DICT = msg.dict;
-        WORDS_BY_KEY = msg.wordsByKey;
-        WORDS_LIST = msg.wordsList;
-        els.status.textContent = `${DICT.size.toLocaleString()} words · ${msg.ms} ms`;
-        els.check.disabled = false;
-        els.check.textContent = "check";
-        worker.terminate();
-        resolve();
-      } else if (msg.type === "error") {
-        worker.terminate();
-        reject(new Error(msg.message));
-      }
-    };
-    worker.onerror = (e) => {
-      worker.terminate();
-      // fallback to inline parse if worker errors
-      fetchAndParseInline().then(resolve, reject);
-    };
-    worker.postMessage({ type: "load", url: "words.txt" });
+    const id = ++MSG_ID;
+    PENDING.set(id, { resolve, reject });
+    WORKER.postMessage({ id, type, ...payload });
   });
+}
+
+function startWorker() {
+  return new Promise((resolve, reject) => {
+    let w;
+    try {
+      w = new Worker("worker.js");
+    } catch (err) { reject(err); return; }
+    w.onmessage = (e) => {
+      const msg = e.data;
+      const p = PENDING.get(msg.id);
+      if (!p) return;
+      PENDING.delete(msg.id);
+      if (msg.type === "error") p.reject(new Error(msg.message));
+      else p.resolve(msg);
+    };
+    w.onerror = (e) => reject(new Error(e.message || "worker error"));
+    WORKER = w;
+    resolve();
+  });
+}
+
+async function loadDict() {
+  els.status.textContent = "loading dictionary…";
+  try {
+    await startWorker();
+    const r = await send("load", { url: "words.txt" });
+    WORKER_READY = true;
+    els.status.textContent = `${r.count.toLocaleString()} words · ${r.ms} ms`;
+    els.check.disabled = false;
+    els.check.textContent = "check";
+  } catch (err) {
+    // fallback: parse on main thread (older browsers / no Worker)
+    await fetchAndParseInline();
+  }
 }
 
 async function fetchAndParseInline() {
@@ -103,18 +100,51 @@ async function fetchAndParseInline() {
   els.check.textContent = "check";
 }
 
-function clean(s) {
-  return s.toLowerCase().replace(/[^a-z]/g, "");
+// Inline-fallback query: same shape as the worker's response
+function inlineQuery(word) {
+  const w = clean(word);
+  if (!w) return { word: "", legal: false, full: [], sub: [] };
+  const legal = DICT.has(w);
+  const full = (WORDS_BY_KEY.get(sortedKey(w)) || []).slice().sort();
+  const pool = new Array(26).fill(0);
+  for (let i = 0; i < w.length; i++) pool[w.charCodeAt(i) - 97]++;
+  const subByLen = new Map();
+  outer: for (const word of WORDS_LIST) {
+    if (word.length >= w.length) continue;
+    const c = new Array(26).fill(0);
+    for (let i = 0; i < word.length; i++) {
+      const code = word.charCodeAt(i) - 97;
+      if (code < 0 || code > 25) continue outer;
+      c[code]++;
+      if (c[code] > pool[code]) continue outer;
+    }
+    let arr = subByLen.get(word.length);
+    if (!arr) { arr = []; subByLen.set(word.length, arr); }
+    arr.push(word);
+  }
+  const sub = Array.from(subByLen.keys())
+    .sort((a, b) => b - a)
+    .map(L => ({ length: L, words: subByLen.get(L).slice().sort() }));
+  return { word: w, legal, full, sub };
 }
 
-function renderVerdict(input) {
-  const w = clean(input);
+async function queryDict(word) {
+  if (WORKER_READY) {
+    const m = await send("query", { word });
+    return m.result;
+  }
+  return inlineQuery(word);
+}
+
+function renderVerdict(result) {
+  const w = result.word;
   els.verdict.classList.remove("hidden", "good", "bad");
   if (!w) {
     els.verdict.classList.add("hidden");
+    els.verdict.innerHTML = "";
     return;
   }
-  if (DICT.has(w)) {
+  if (result.legal) {
     els.verdict.classList.add("good");
     els.verdict.innerHTML = `<span class="verdict-mark">legal</span> <span class="verdict-word">${w.toUpperCase()}</span> <span class="verdict-note">is a valid Bananagrams word.</span>`;
   } else {
@@ -123,45 +153,24 @@ function renderVerdict(input) {
   }
 }
 
-function renderArrangements(input) {
-  const w = clean(input);
+function renderArrangements(result) {
+  const w = result.word;
   els.results.classList.toggle("hidden", !w);
   if (!w) return;
 
-  // full anagrams
-  const key = sortedKey(w);
-  const full = (WORDS_BY_KEY.get(key) || []).slice().sort();
-
-  // sub-anagrams: scan once
-  const pool = letterCounts(w);
-  const subByLen = new Map();
-  for (const word of WORDS_LIST) {
-    if (word.length > w.length) continue;       // can't fit
-    if (word.length === w.length) continue;     // those are full anagrams
-    if (!fitsInPool(word, pool)) continue;
-    let arr = subByLen.get(word.length);
-    if (!arr) { arr = []; subByLen.set(word.length, arr); }
-    arr.push(word);
-  }
-
-  // render
-  const subTotal = Array.from(subByLen.values()).reduce((a, b) => a + b.length, 0);
+  const subTotal = result.sub.reduce((a, g) => a + g.words.length, 0);
   els.resultsSummary.textContent =
-    `${full.length} full · ${subTotal} sub · pool ${w.toUpperCase()}`;
+    `${result.full.length} full · ${subTotal} sub · pool ${w.toUpperCase()}`;
 
-  els.fullBox.innerHTML = full.length
-    ? full.map(wordTile).join("")
+  els.fullBox.innerHTML = result.full.length
+    ? result.full.map(wordTile).join("")
     : `<span class="empty-note">No words use all those letters.</span>`;
 
-  const lens = Array.from(subByLen.keys()).sort((a, b) => b - a);
-  els.subBox.innerHTML = lens.length
-    ? lens.map(L => {
-        const arr = subByLen.get(L).slice().sort();
-        return `<div class="length-group">
-          <div class="length-head"><span class="length-label">${L} letters</span><span class="length-count">${arr.length}</span></div>
-          <div class="words">${arr.map(wordTile).join("")}</div>
-        </div>`;
-      }).join("")
+  els.subBox.innerHTML = result.sub.length
+    ? result.sub.map(g => `<div class="length-group">
+        <div class="length-head"><span class="length-label">${g.length} letters</span><span class="length-count">${g.words.length}</span></div>
+        <div class="words">${g.words.map(wordTile).join("")}</div>
+      </div>`).join("")
     : `<span class="empty-note">No sub-anagrams.</span>`;
 }
 
@@ -169,14 +178,18 @@ function wordTile(w) {
   return `<button type="button" class="word" data-word="${w}">${w}</button>`;
 }
 
-function run() {
+let RUN_TOKEN = 0;
+
+async function run() {
+  const myToken = ++RUN_TOKEN;
   const v = els.letters.value;
-  renderVerdict(v);
-  renderDefinition(v);
-  renderArrangements(v);
+  const result = await queryDict(v);
+  if (myToken !== RUN_TOKEN) return; // stale
+  renderVerdict(result);
+  renderDefinition(result);
+  renderArrangements(result);
 }
 
-// click any word tile -> use it as the new input
 document.body.addEventListener("click", e => {
   const t = e.target.closest(".word");
   if (!t) return;
@@ -219,10 +232,10 @@ async function fetchDefinition(word) {
   return entry;
 }
 
-function renderDefinition(input) {
-  const w = clean(input);
+function renderDefinition(result) {
+  const w = result.word;
   els.definition.classList.remove("hidden", "loading", "missing", "error");
-  if (!w || !DICT.has(w)) {
+  if (!w || !result.legal) {
     els.definition.classList.add("hidden");
     els.definition.innerHTML = "";
     return;
@@ -230,9 +243,7 @@ function renderDefinition(input) {
   els.definition.innerHTML = `<span class="defn-label">definition</span> <span class="defn-loading">looking up &ldquo;${w.toUpperCase()}&rdquo;&hellip;</span>`;
 
   fetchDefinition(w).then(entry => {
-    // Guard: input may have changed while we were fetching
-    if (clean(els.letters.value) !== w) return;
-
+    if (clean(els.letters.value) !== w) return; // stale
     if (entry.state === "ok") {
       const meanings = (entry.payload[0]?.meanings || []).slice(0, 3);
       const phon = (entry.payload[0]?.phonetic || "").trim();
