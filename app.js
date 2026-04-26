@@ -43,8 +43,42 @@ function fitsInPool(word, pool) {
   return true;
 }
 
-async function loadDict() {
-  els.status.textContent = "Loading dictionary...";
+function loadDict() {
+  els.status.textContent = "loading dictionary…";
+  return new Promise((resolve, reject) => {
+    let worker;
+    try {
+      worker = new Worker("worker.js");
+    } catch (err) {
+      // Fallback: fetch+parse on main thread (older browsers / strict CSP)
+      return fetchAndParseInline().then(resolve, reject);
+    }
+    worker.onmessage = (e) => {
+      const msg = e.data;
+      if (msg.type === "ready") {
+        DICT = msg.dict;
+        WORDS_BY_KEY = msg.wordsByKey;
+        WORDS_LIST = msg.wordsList;
+        els.status.textContent = `${DICT.size.toLocaleString()} words · ${msg.ms} ms`;
+        els.check.disabled = false;
+        els.check.textContent = "check";
+        worker.terminate();
+        resolve();
+      } else if (msg.type === "error") {
+        worker.terminate();
+        reject(new Error(msg.message));
+      }
+    };
+    worker.onerror = (e) => {
+      worker.terminate();
+      // fallback to inline parse if worker errors
+      fetchAndParseInline().then(resolve, reject);
+    };
+    worker.postMessage({ type: "load", url: "words.txt" });
+  });
+}
+
+async function fetchAndParseInline() {
   const t0 = performance.now();
   const res = await fetch("words.txt");
   if (!res.ok) throw new Error("Could not load words.txt");
