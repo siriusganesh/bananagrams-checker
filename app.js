@@ -61,9 +61,9 @@ async function loadDict() {
     arr.push(w);
   }
   const ms = Math.round(performance.now() - t0);
-  els.status.textContent = `Dictionary loaded: ${DICT.size.toLocaleString()} words (${ms} ms).`;
+  els.status.textContent = `${DICT.size.toLocaleString()} words · ${ms} ms`;
   els.check.disabled = false;
-  els.check.textContent = "Check";
+  els.check.textContent = "check";
 }
 
 function clean(s) {
@@ -79,10 +79,10 @@ function renderVerdict(input) {
   }
   if (DICT.has(w)) {
     els.verdict.classList.add("good");
-    els.verdict.textContent = `✓  "${w.toUpperCase()}" is a legal Bananagrams word.`;
+    els.verdict.innerHTML = `<span class="verdict-mark">legal</span> <span class="verdict-word">${w.toUpperCase()}</span> <span class="verdict-note">is a valid Bananagrams word.</span>`;
   } else {
     els.verdict.classList.add("bad");
-    els.verdict.textContent = `✗  "${w.toUpperCase()}" is NOT in the dictionary.`;
+    els.verdict.innerHTML = `<span class="verdict-mark">not legal</span> <span class="verdict-word">${w.toUpperCase()}</span> <span class="verdict-note">is not in the dictionary.</span>`;
   }
 }
 
@@ -110,24 +110,22 @@ function renderArrangements(input) {
   // render
   const subTotal = Array.from(subByLen.values()).reduce((a, b) => a + b.length, 0);
   els.resultsSummary.textContent =
-    `${full.length} full anagram${full.length === 1 ? "" : "s"}, ` +
-    `${subTotal} sub-anagram${subTotal === 1 ? "" : "s"} found ` +
-    `(${w.length} letters: ${w.toUpperCase()}).`;
+    `${full.length} full · ${subTotal} sub · pool ${w.toUpperCase()}`;
 
   els.fullBox.innerHTML = full.length
     ? full.map(wordTile).join("")
-    : `<span class="muted small">No words use all those letters.</span>`;
+    : `<span class="empty-note">No words use all those letters.</span>`;
 
   const lens = Array.from(subByLen.keys()).sort((a, b) => b - a);
   els.subBox.innerHTML = lens.length
     ? lens.map(L => {
         const arr = subByLen.get(L).slice().sort();
         return `<div class="length-group">
-          <h3>${L} letters &mdash; ${arr.length}</h3>
+          <div class="length-head"><span class="length-label">${L} letters</span><span class="length-count">${arr.length}</span></div>
           <div class="words">${arr.map(wordTile).join("")}</div>
         </div>`;
       }).join("")
-    : `<span class="muted small">No sub-anagrams.</span>`;
+    : `<span class="empty-note">No sub-anagrams.</span>`;
 }
 
 function wordTile(w) {

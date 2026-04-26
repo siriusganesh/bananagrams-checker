@@ -3,43 +3,76 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Bananagrams Word Checker — validate a string and find every legal arrangement of its letters." />
   <title>Bananagrams Word Checker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main>
-    <h1>Bananagrams Word Checker</h1>
-    <p class="sub">Validates against a Scrabble-style word list and finds every legal word you can build from your letters.</p>
-
-    <div class="input-row">
-      <input id="letters" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
-             placeholder="enter letters (e.g. RETAIN)" />
-      <button id="check" disabled>Loading dictionary...</button>
+  <nav class="topnav">
+    <div class="wrap">
+      <a href="/" class="brand">bananagrams</a>
+      <ul>
+        <li><a href="#check">check</a></li>
+        <li><a href="#results">arrangements</a></li>
+        <li><a href="https://github.com/siriusganesh/bananagrams-checker" target="_blank" rel="noreferrer">source</a></li>
+        <li><a href="https://siriusganesh.com" target="_blank" rel="noreferrer">siriusganesh.com</a></li>
+      </ul>
     </div>
+  </nav>
 
-    <section id="status" class="status"></section>
-
-    <section id="verdict" class="verdict hidden"></section>
-
-    <section id="results" class="results hidden">
-      <div class="results-summary"></div>
-      <div class="anagram-block">
-        <h2>Full anagrams <span class="muted">(uses all letters)</span></h2>
-        <div class="words" data-group="full"></div>
-      </div>
-      <div class="anagram-block">
-        <h2>Sub-anagrams <span class="muted">(any subset of letters)</span></h2>
-        <div class="length-groups" data-group="sub"></div>
-      </div>
+  <main class="page">
+    <section class="hero">
+      <span class="overline">Word check · Anagram solver · TWL-superset dictionary</span>
+      <h1>Bananagrams<span class="accent">.</span></h1>
+      <p class="lede">
+        Enter a string of letters. The validator tells you whether it's a
+        <strong>legal Bananagrams word</strong>, then lists every legal word you can build
+        from any subset of those letters &mdash; full anagrams first, sub-anagrams grouped
+        by length.
+      </p>
     </section>
 
-    <footer>
-      <p class="muted small">
-        Word list: ~279k words (Collins/SOWPODS-derived superset that includes all TWL Scrabble words).
-        See the README on the repo for how to swap in a different list.
-      </p>
-    </footer>
+    <hr class="rule">
+    <section class="block" id="check">
+      <header>
+        <span class="num">01</span>
+        <h2>Check a word</h2>
+        <span class="meta" id="status">loading dictionary&hellip;</span>
+      </header>
+
+      <div class="input-row">
+        <input id="letters" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"
+               placeholder="enter letters (e.g. RETAIN)" />
+        <button id="check" disabled>loading&hellip;</button>
+      </div>
+
+      <div id="verdict" class="verdict hidden"></div>
+    </section>
+
+    <section class="block hidden" id="results">
+      <header>
+        <span class="num">02</span>
+        <h2>Arrangements</h2>
+        <span class="meta results-summary"></span>
+      </header>
+
+      <h3 class="subsection-label">Full anagrams <span class="dim">— uses all letters</span></h3>
+      <div class="words" data-group="full"></div>
+
+      <h3 class="subsection-label" style="margin-top:2rem">Sub-anagrams <span class="dim">— any subset of letters</span></h3>
+      <div class="length-groups" data-group="sub"></div>
+    </section>
+
   </main>
+
+  <footer class="page-footer">
+    <span>2026.04.26</span>
+    <span>bananagrams checker · v1.1</span>
+    <span>~279k word dictionary</span>
+  </footer>
 
   <script src="app.js"></script>
 </body>
