@@ -5,11 +5,14 @@ const els = {
   check: document.getElementById("check"),
   status: document.getElementById("status"),
   verdict: document.getElementById("verdict"),
+  definition: document.getElementById("definition"),
   results: document.getElementById("results"),
   resultsSummary: document.querySelector(".results-summary"),
   fullBox: document.querySelector('[data-group="full"]'),
   subBox: document.querySelector('[data-group="sub"]'),
 };
+
+const DEFN_CACHE = new Map(); // word -> { state: "loading"|"ok"|"missing"|"error", payload }
 
 let DICT = null;          // Set<string>
 let WORDS_BY_KEY = null;  // Map<sortedLetters, string[]>  -- for fast full-anagram lookup
@@ -129,19 +132,103 @@ function renderArrangements(input) {
 }
 
 function wordTile(w) {
-  return `<span class="word">${w}</span>`;
+  return `<button type="button" class="word" data-word="${w}">${w}</button>`;
 }
 
 function run() {
   const v = els.letters.value;
   renderVerdict(v);
+  renderDefinition(v);
   renderArrangements(v);
 }
+
+// click any word tile -> use it as the new input
+document.body.addEventListener("click", e => {
+  const t = e.target.closest(".word");
+  if (!t) return;
+  const w = t.dataset.word;
+  if (!w) return;
+  els.letters.value = w.toUpperCase();
+  run();
+  els.letters.focus();
+  if (typeof els.letters.scrollIntoView === "function") {
+    els.letters.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+});
 
 els.check.addEventListener("click", run);
 els.letters.addEventListener("keydown", e => {
   if (e.key === "Enter") run();
 });
+
+// --- Definitions (Free Dictionary API) -----------------------------------
+
+async function fetchDefinition(word) {
+  if (DEFN_CACHE.has(word)) return DEFN_CACHE.get(word);
+  const entry = { state: "loading" };
+  DEFN_CACHE.set(word, entry);
+  try {
+    const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+    if (r.status === 404) {
+      entry.state = "missing";
+    } else if (!r.ok) {
+      entry.state = "error";
+    } else {
+      const data = await r.json();
+      entry.state = "ok";
+      entry.payload = data;
+    }
+  } catch (err) {
+    entry.state = "error";
+    entry.message = String(err);
+  }
+  return entry;
+}
+
+function renderDefinition(input) {
+  const w = clean(input);
+  els.definition.classList.remove("hidden", "loading", "missing", "error");
+  if (!w || !DICT.has(w)) {
+    els.definition.classList.add("hidden");
+    els.definition.innerHTML = "";
+    return;
+  }
+  els.definition.innerHTML = `<span class="defn-label">definition</span> <span class="defn-loading">looking up &ldquo;${w.toUpperCase()}&rdquo;&hellip;</span>`;
+
+  fetchDefinition(w).then(entry => {
+    // Guard: input may have changed while we were fetching
+    if (clean(els.letters.value) !== w) return;
+
+    if (entry.state === "ok") {
+      const meanings = (entry.payload[0]?.meanings || []).slice(0, 3);
+      const phon = (entry.payload[0]?.phonetic || "").trim();
+      const blocks = meanings.map(m => {
+        const def = (m.definitions || [])[0];
+        if (!def) return "";
+        return `<div class="defn-row">
+          <span class="defn-pos">${m.partOfSpeech || ""}</span>
+          <span class="defn-text">${escapeHtml(def.definition)}</span>
+        </div>`;
+      }).join("");
+      els.definition.innerHTML =
+        `<span class="defn-label">definition</span>` +
+        (phon ? ` <span class="defn-phon">${escapeHtml(phon)}</span>` : "") +
+        `<div class="defn-list">${blocks || '<span class="defn-missing">(no definition body returned)</span>'}</div>`;
+    } else if (entry.state === "missing") {
+      els.definition.classList.add("missing");
+      els.definition.innerHTML = `<span class="defn-label">definition</span> <span class="defn-missing">no public definition found for &ldquo;${w.toUpperCase()}&rdquo;.</span>`;
+    } else {
+      els.definition.classList.add("error");
+      els.definition.innerHTML = `<span class="defn-label">definition</span> <span class="defn-missing">lookup failed.</span>`;
+    }
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+  );
+}
 
 loadDict().catch(err => {
   els.status.textContent = "Failed to load dictionary: " + err.message;

@@ -288,14 +288,14 @@ button#check:disabled {
   color: var(--text-dim);
 }
 
-/* word tiles */
+/* word tiles (buttons) */
 .words {
   display: flex;
   flex-wrap: wrap;
   gap: .4rem;
   margin: 0 0 .25rem;
 }
-.word {
+button.word {
   font-family: var(--font-mono);
   font-size: .85rem;
   letter-spacing: .08em;
@@ -304,11 +304,20 @@ button#check:disabled {
   border: 1px solid var(--border);
   background: var(--bg-tint);
   color: var(--text-heading);
-  transition: border-color .1s ease, color .1s ease;
+  cursor: pointer;
+  transition: border-color .1s ease, color .1s ease, background .1s ease;
 }
-.word:hover {
+button.word:hover,
+button.word:focus-visible {
   border-color: var(--navy);
   color: var(--navy);
+  background: var(--navy-soft);
+  outline: none;
+}
+button.word:active {
+  background: var(--navy);
+  color: #fff;
+  border-color: var(--navy);
 }
 
 .length-group {
@@ -396,4 +405,65 @@ footer.page-footer {
   .input-row { flex-direction: column; gap: .5rem; }
   button#check { padding: .8rem 1.2rem; }
   #letters { font-size: 1rem; }
+}
+
+/* definition */
+.definition {
+  margin: .75rem 0 .25rem;
+  padding: .85rem 1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--navy);
+  background: var(--bg);
+  font-size: .94rem;
+  line-height: 1.55;
+}
+.definition.missing,
+.definition.error {
+  border-left-color: var(--border-strong);
+  background: var(--bg-tint);
+}
+.defn-label {
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  font-weight: 500;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--navy);
+  margin-right: .55rem;
+}
+.defn-phon {
+  font-family: var(--font-mono);
+  font-size: .8rem;
+  color: var(--text-faint);
+}
+.defn-loading,
+.defn-missing {
+  font-family: var(--font-mono);
+  font-size: .82rem;
+  color: var(--text-dim);
+  letter-spacing: .03em;
+}
+.defn-list { margin-top: .55rem; display: flex; flex-direction: column; gap: .4rem; }
+.defn-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: .65rem;
+  align-items: baseline;
+  padding-bottom: .35rem;
+  border-bottom: 1px dashed var(--border);
+}
+.defn-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.defn-pos {
+  font-family: var(--font-mono);
+  font-size: .7rem;
+  font-weight: 500;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--navy);
+  font-style: italic;
+}
+.defn-text { color: var(--text); }
+
+@media (max-width: 560px) {
+  .defn-row { grid-template-columns: 1fr; gap: .15rem; }
 }
