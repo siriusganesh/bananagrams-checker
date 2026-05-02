@@ -27,8 +27,8 @@
   --navy: #011f5b;
   --navy-deep: #001541;
   --navy-soft: #dbe3f5;
-  --rust: #a8443a;
-  --rust-soft: #f7e2dd;
+  --rust: #990000;
+  --rust-soft: #fbe5e5;
   --good: #1d6f3f;
   --good-soft: #dcefe2;
   --font-sans: Verdana, Geneva, "DejaVu Sans", sans-serif;
@@ -80,7 +80,7 @@ strong { color: var(--text-heading); font-weight: 700; }
 .dim   { color: var(--text-dim); }
 .faint { color: var(--text-faint); }
 .hidden { display: none !important; }
-.accent { color: var(--navy); }
+.accent { color: var(--rust); }
 
 .page {
   max-width: var(--page-max);
