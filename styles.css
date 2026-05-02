@@ -447,6 +447,13 @@ footer.page-footer {
   }
   nav.topnav ul::-webkit-scrollbar { display: none; }
   nav.topnav a { white-space: nowrap; }
+  /* Anchor dropdown to the viewport so the scrolling ul doesn't clip it. */
+  nav.topnav .dropdown-menu {
+    position: fixed;
+    top: 2.6rem;
+    right: 1rem;
+    left: auto;
+  }
   .page { padding: 3rem 1.25rem; }
   section.block { margin: 2.75rem 0; }
   .hero { padding-top: 1.5rem; padding-bottom: .5rem; }
