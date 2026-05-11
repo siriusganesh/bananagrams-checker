@@ -51,6 +51,11 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Reserve scrollbar gutter so a short page (no vertical overflow) doesn't
+   horizontally shift the centered .wrap relative to the main site, which
+   always has a scrollbar consuming ~15px of layout width. */
+html { scrollbar-gutter: stable; }
+
 body { min-height: 100vh; }
 
 a {
@@ -95,7 +100,10 @@ strong { color: var(--text-heading); font-weight: 700; }
   text-transform: uppercase;
   color: var(--text-dim);
   display: block;
-  margin-bottom: 1.25rem;
+  /* Tight kicker→title gap so the overline reads as a label for the h1
+     beneath it; the h1's 1.25rem margin-bottom keeps the title→body break
+     visibly larger than this internal gap. */
+  margin-bottom: .75rem;
 }
 
 .rule {
