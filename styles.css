@@ -51,6 +51,11 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Reserve scrollbar gutter so a short page (no vertical overflow) doesn't
+   horizontally shift the centered .wrap relative to the main site, which
+   always has a scrollbar consuming ~15px of layout width. */
+html { scrollbar-gutter: stable; }
+
 body { min-height: 100vh; }
 
 a {
@@ -95,7 +100,10 @@ strong { color: var(--text-heading); font-weight: 700; }
   text-transform: uppercase;
   color: var(--text-dim);
   display: block;
-  margin-bottom: 1.25rem;
+  /* Tight kicker→title gap so the overline reads as a label for the h1
+     beneath it; the h1's 1.25rem margin-bottom keeps the title→body break
+     visibly larger than this internal gap. */
+  margin-bottom: .75rem;
 }
 
 .rule {
@@ -189,7 +197,8 @@ nav.topnav .dropdown-menu {
   z-index: 20;
 }
 nav.topnav .dropdown-menu li { padding: 0; }
-nav.topnav .dropdown-menu a {
+nav.topnav .dropdown-menu a,
+nav.topnav .dropdown-menu .is-current {
   display: block; padding: .55rem .9rem; font-size: .78rem;
   border: 1px solid transparent;
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
@@ -197,8 +206,12 @@ nav.topnav .dropdown-menu a {
 nav.topnav .dropdown-menu a:hover {
   background: var(--navy-soft); border-color: var(--navy); color: var(--navy);
 }
-nav.topnav .dropdown-menu a.is-current,
-nav.topnav .dropdown-menu a.is-current:hover {
+/* Current page marker is rendered as <span class="is-current"> rather than
+   <a> so it doesn't fail the Lighthouse crawlable-anchors audit (anchors
+   without href are not crawlable). aria-current="page" on the span carries
+   the semantics; this rule dims it to match the anchor's "current" state. */
+nav.topnav .dropdown-menu .is-current,
+nav.topnav .dropdown-menu .is-current:hover {
   color: var(--text-faint);
   background: transparent; border-color: transparent;
   pointer-events: none; cursor: default;
