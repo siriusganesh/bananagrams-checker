@@ -16,6 +16,7 @@
 }
 
 :root {
+  color-scheme: light;
   --bg: #ffffff;
   --bg-tint: #f7f7f4;
   --text: #111113;
@@ -31,10 +32,45 @@
   --rust-soft: #fbe5e5;
   --good: #1d6f3f;
   --good-soft: #dcefe2;
+  /* Split out of the rules below so the dark theme can override them.
+     --on-accent is text drawn ON a navy fill: white in light, dark in dark,
+     because the dark theme lifts navy to a light blue. --nav-bg and --shadow
+     carry the two colours that cannot be expressed with the tokens above. */
+  --on-accent: #ffffff;
+  --nav-bg: #ffffffe0;
+  --shadow: rgba(0,0,0,.14);
   --font-sans: Verdana, Geneva, "DejaVu Sans", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --measure: 66ch;
   --page-max: 880px;
+}
+
+/* Dark theme. Accents are lifted, not inverted: navy at #011f5b is
+   unreadable on a dark ground, so it becomes the light blue that the same
+   rules then use for links, fills and tile hover. Values match co-14ers so
+   the two projects read as one site. data-theme always carries the RESOLVED
+   theme (set pre-paint by the head script), so one block covers it and there
+   is no duplicate prefers-color-scheme copy of the tokens. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121316;
+  --bg-tint: #1a1b1e;
+  --text: #e6e6e3;
+  --text-heading: #f4f4f1;
+  --text-dim: #a8a8a3;
+  --text-faint: #97978f;
+  --border: #2e2f33;
+  --border-strong: #6b6c70;
+  --navy: #93b4f2;
+  --navy-deep: #bcd1fa;
+  --navy-soft: #1d2c4d;
+  --rust: #f08a82;
+  --rust-soft: #3a1a19;
+  --good: #5cc98a;
+  --good-soft: #16301f;
+  --on-accent: #0b1220;
+  --nav-bg: #121316e0;
+  --shadow: rgba(0,0,0,.5);
 }
 
 * { box-sizing: border-box; }
@@ -106,6 +142,49 @@ strong { color: var(--text-heading); font-weight: 700; }
   margin-bottom: .75rem;
 }
 
+/* Kicker row: the overline keeps the left, the theme toggle takes the right.
+   Inline rather than fixed, so the control never floats over the word tiles
+   on a phone. The overline's own margin-bottom moves up to this row so the
+   tight kicker -> h1 gap above survives the extra wrapper. */
+.hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .75rem;
+}
+.hero-top .overline { margin-bottom: 0; }
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: var(--bg);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.theme-toggle:hover {
+  border-color: var(--navy);
+  color: var(--navy);
+  background: var(--navy-soft);
+}
+.theme-toggle:focus-visible {
+  outline: none;
+  border-color: var(--navy);
+  box-shadow: inset 0 -2px 0 0 var(--navy);
+}
+/* The icon names the theme the click switches TO, so only one is ever drawn.
+   Swapped in CSS off data-theme, not in JS, so the button is already correct
+   on the first paint that shows it. */
+.theme-toggle .icon-sun { display: none; }
+:root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+
 .rule {
   height: 2px;
   background: var(--navy);
@@ -119,7 +198,7 @@ nav.topnav {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: #ffffffe0;
+  background: var(--nav-bg);
   backdrop-filter: saturate(140%) blur(10px);
   -webkit-backdrop-filter: saturate(140%) blur(10px);
   border-bottom: 1px solid var(--border);
@@ -193,7 +272,7 @@ nav.topnav .dropdown-menu {
   border: 0; padding: 0; margin: 0; list-style: none;
   display: flex; flex-direction: column;
   align-items: stretch; gap: 0;
-  box-shadow: 0 6px 18px rgba(0,0,0,.14);
+  box-shadow: 0 6px 18px var(--shadow);
   z-index: 20;
 }
 nav.topnav .dropdown-menu li { padding: 0; }
@@ -313,7 +392,7 @@ button#check {
   text-transform: uppercase;
   padding: 0 1.4rem;
   background: var(--navy);
-  color: #fff;
+  color: var(--on-accent);
   border: 1px solid var(--navy);
   border-radius: 0;
   cursor: pointer;
@@ -353,7 +432,7 @@ button#check:disabled {
   letter-spacing: .12em;
   text-transform: uppercase;
   padding: .15rem .5rem;
-  background: #fff;
+  background: var(--bg);
   border: 1px solid currentColor;
   color: var(--navy);
 }
@@ -399,7 +478,7 @@ button.word:focus-visible {
 }
 button.word:active {
   background: var(--navy);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--navy);
 }
 

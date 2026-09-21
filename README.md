@@ -18,7 +18,14 @@ Click any tile to use that word as the new input.
   never blocks input. Inline fallback path when no worker is available.
 - Service worker (versioned cache, `skipWaiting` + `clients.claim`)
   precaches HTML/CSS/JS/words/fonts — fully usable offline after first visit.
-- Lighthouse CI on every PR (mobile + desktop matrix).
+- Definitions come from Wiktionary and dictionaryapi.dev, raced so a dead
+  source cannot hold up a live one, with a base-form retry (ROIDS -> ROID)
+  when both miss. A game word list holds many words no general dictionary
+  defines, so the panel says "no source has an entry" rather than implying
+  the word is not real.
+- Light and dark theme, resolved before first paint from localStorage or the
+  OS setting. The dark palette lifts the accents instead of inverting them.
+- Lighthouse CI on every PR (mobile + desktop matrix), plus `node --test`.
 
 ## Dictionary
 
