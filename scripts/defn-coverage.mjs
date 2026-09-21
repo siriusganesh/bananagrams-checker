@@ -21,7 +21,8 @@ const SAMPLE = Number(process.argv[2] || 200);
 const SEED = Number(process.argv[3] || 1);
 const CONCURRENCY = 1;   // Wiktionary answers 429 above this
 const TIMEOUT_MS = 8000;
-const RATE_LIMIT_BACKOFF_MS = 1500;
+const RATE_LIMIT_BACKOFF_MS = 4000;  // doubles per retry
+const MIN_GAP_MS = 400;              // throttle, see ask()
 const MAX_BASE_FORMS = 2;
 
 const SOURCES = [
@@ -39,6 +40,17 @@ const SOURCES = [
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// Wiktionary answers 429 to an unthrottled walk even at one request at a
+// time, and a throttled source looks exactly like a dead one in the totals.
+// Space the requests out, back off when it still says 429, and report a
+// source that keeps saying it as "throttled" rather than counting it a miss.
+let lastRequestAt = 0;
+async function throttle() {
+  const wait = MIN_GAP_MS - (Date.now() - lastRequestAt);
+  if (wait > 0) await sleep(wait);
+  lastRequestAt = Date.now();
+}
+
 // Deterministic sampling so two runs are comparable.
 function lcg(seed) {
   let s = seed >>> 0 || 1;
@@ -54,15 +66,17 @@ function sample(list, n, seed) {
   return [...picked];
 }
 
-async function ask(source, word, retries = 2) {
+async function ask(source, word, retries = 3) {
+  await throttle();
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
     const r = await fetch(source.url(word), { signal: ctl.signal });
     if (r.status === 404) return "missing";
-    if (r.status === 429 && retries > 0) {
+    if (r.status === 429) {
+      if (retries === 0) return "throttled";
       clearTimeout(timer);
-      await sleep(RATE_LIMIT_BACKOFF_MS);
+      await sleep(RATE_LIMIT_BACKOFF_MS * Math.pow(2, 3 - retries));
       return ask(source, word, retries - 1);
     }
     if (!r.ok) return "error";
@@ -119,7 +133,12 @@ console.log(`\nsample        ${n} words, seed ${SEED}`);
 for (const s of SOURCES) {
   const ok = results.filter(r => r.exact[s.name] === "ok").length;
   const err = results.filter(r => r.exact[s.name] === "error").length;
-  console.log(`${s.name.padEnd(20)} ${pct(ok)} hit  (${ok}/${n}), ${err} no answer`);
+  const thr = results.filter(r => r.exact[s.name] === "throttled").length;
+  const miss = results.filter(r => r.exact[s.name] === "missing").length;
+  const answered = ok + miss;
+  const rate = answered ? `${((ok / answered) * 100).toFixed(1)}%` : "n/a";
+  console.log(`${s.name.padEnd(20)} ${rate} of the ${answered} it answered ` +
+              `(${ok} hit, ${miss} no entry), ${err} no answer, ${thr} throttled`);
 }
 const exactHits = results.filter(r => r.exactHit).length;
 const baseHits = results.filter(r => r.baseHit).length;
