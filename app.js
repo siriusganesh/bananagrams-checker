@@ -433,6 +433,43 @@ function escapeHtml(s) {
   );
 }
 
+// --- Theme ---------------------------------------------------------------
+//
+// data-theme always carries the resolved theme; the head script sets it
+// before first paint. THEME_KEY holds only an explicit choice from the
+// toggle, so an untouched page keeps following the OS setting, including a
+// flip while the tab is open. Clearing the key restores that.
+
+const THEME_KEY = "bananagrams.theme";
+const themeBtn = document.getElementById("themeToggle");
+const themeMeta = document.getElementById("themeColor");
+const darkMQ = window.matchMedia("(prefers-color-scheme: dark)");
+
+function storedTheme() {
+  try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  if (themeMeta) themeMeta.content = theme === "dark" ? "#121316" : "#ffffff";
+  // The label names the destination, matching the icon the CSS draws.
+  const label = `switch to ${theme === "dark" ? "light" : "dark"} theme`;
+  themeBtn.setAttribute("aria-label", label);
+  themeBtn.title = label;
+}
+
+applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+
+themeBtn.addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem(THEME_KEY, next); } catch (e) {}
+  applyTheme(next);
+});
+
+darkMQ.addEventListener("change", e => {
+  if (!storedTheme()) applyTheme(e.matches ? "dark" : "light");
+});
+
 loadDict().catch(err => {
   els.status.textContent = "Failed to load dictionary: " + err.message;
 });
