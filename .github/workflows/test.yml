@@ -1,0 +1,21 @@
+name: Unit tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  node-test:
+    runs-on: ubuntu-latest
+    name: node --test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Discovers test/ automatically. No dependencies, no network.
+      - name: Run tests
+        run: node --test

@@ -12,8 +12,6 @@ const els = {
   subBox: document.querySelector('[data-group="sub"]'),
 };
 
-const DEFN_CACHE = new Map();
-
 let WORKER = null;
 let WORKER_READY = false;
 let MSG_ID = 0;
@@ -208,28 +206,172 @@ els.letters.addEventListener("keydown", e => {
   if (e.key === "Enter") run();
 });
 
-// --- Definitions (Free Dictionary API) -----------------------------------
+// --- Definitions ---------------------------------------------------------
+//
+// NWL2023 is a game word list, not a dictionary. No free definition source
+// covers all 196,601 entries, so a single API call is not enough. The
+// lookup widens in two directions before it reports a miss:
+//
+//   1. Two sources in parallel: the Free Dictionary API and Wiktionary.
+//      Wiktionary carries many inflections and obscure game-list entries
+//      that the Free Dictionary API returns 404 for.
+//   2. Base forms. ROIDS has no entry of its own, ROID does. See
+//      defn-lemma.js for the candidate rules.
+//
+// Every request has its own timeout and the whole lookup has a budget, so
+// a slow or dead source cannot leave the panel on "looking up...".
 
-async function fetchDefinition(word) {
-  if (DEFN_CACHE.has(word)) return DEFN_CACHE.get(word);
-  const entry = { state: "loading" };
-  DEFN_CACHE.set(word, entry);
+const DEFN_REQUEST_TIMEOUT_MS = 7000;   // per HTTP request
+const DEFN_BUDGET_MS = 14000;           // whole lookup, all sources and forms
+const DEFN_MAX_BASE_FORMS = 2;          // extra forms to try after the exact word
+
+// word -> Promise<entry>. The promise is cached, not a mutable object, so
+// a second lookup of the same word joins the first instead of reading a
+// half-filled record.
+const DEFN_CACHE = new Map();
+
+// Wiktionary first: measured coverage of this word list is much better, and
+// it holds the inflections and archaic forms a game list is full of
+// (ROIDS -> "plural of roid", CINQ -> "archaic form of cinque").
+const DEFN_SOURCES = [
+  {
+    name: "wiktionary",
+    url: w => `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(w)}`,
+    parse: parseWiktionary,
+  },
+  {
+    name: "dictionaryapi.dev",
+    url: w => `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(w)}`,
+    parse: parseFreeDictionary,
+  },
+];
+
+// Resolves rather than throws. status 0 means the request never answered
+// (offline, CORS, DNS, or the abort below).
+async function fetchJson(url, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const r = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
-    if (r.status === 404) {
-      entry.state = "missing";
-    } else if (!r.ok) {
-      entry.state = "error";
-    } else {
-      const data = await r.json();
-      entry.state = "ok";
-      entry.payload = data;
-    }
+    const r = await fetch(url, { signal: controller.signal });
+    if (!r.ok) return { status: r.status };
+    return { status: 200, data: await r.json() };
   } catch (err) {
-    entry.state = "error";
-    entry.message = String(err);
+    return { status: 0, message: String((err && err.message) || err) };
+  } finally {
+    clearTimeout(timer);
   }
-  return entry;
+}
+
+function parseFreeDictionary(data) {
+  if (!Array.isArray(data) || !data[0]) return { phonetic: "", senses: [] };
+  const first = data[0];
+  const senses = [];
+  for (const m of (first.meanings || [])) {
+    const d = (m.definitions || [])[0];
+    if (d && d.definition) senses.push({ pos: m.partOfSpeech || "", text: d.definition });
+    if (senses.length === 3) break;
+  }
+  return { phonetic: String(first.phonetic || "").trim(), senses };
+}
+
+function parseWiktionary(data) {
+  const groups = (data && data.en) || [];
+  const senses = [];
+  for (const g of groups) {
+    const d = (g.definitions || [])[0];
+    if (!d || !d.definition) continue;
+    const text = stripMarkup(d.definition);
+    if (text) senses.push({ pos: g.partOfSpeech || "", text });
+    if (senses.length === 3) break;
+  }
+  return { phonetic: "", senses };
+}
+
+// Wiktionary returns definition bodies as HTML fragments. Drop the tags and
+// decode the handful of entities that survive. The result is escaped again
+// by escapeHtml before it reaches the DOM.
+function stripMarkup(html) {
+  return String(html)
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(amp|lt|gt|quot|apos|nbsp|#39|#x27);/g, (_, e) => ({
+      amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", "#39": "'", "#x27": "'",
+    }[e]))
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function trySource(source, form) {
+  const r = await fetchJson(source.url(form), DEFN_REQUEST_TIMEOUT_MS);
+  if (r.status === 404) return { state: "missing" };
+  if (r.status !== 200) return { state: "error" };
+  const parsed = source.parse(r.data);
+  if (!parsed.senses.length) return { state: "missing" };
+  return {
+    state: "ok",
+    source: source.name,
+    matched: form,
+    phonetic: parsed.phonetic,
+    senses: parsed.senses,
+  };
+}
+
+// Resolves as soon as any source returns an entry, so one dead source cannot
+// hold up a live one. When nothing has an entry it waits for every source to
+// settle, so it can tell "no entry anywhere" from "a source never answered".
+function firstEntry(attempts) {
+  return new Promise(resolve => {
+    if (!attempts.length) { resolve({ state: "missing" }); return; }
+    let pending = attempts.length;
+    let sawError = false;
+    let settled = false;
+    for (const a of attempts) {
+      a.then(r => {
+        if (settled) return;
+        if (r.state === "ok") { settled = true; resolve(r); return; }
+        if (r.state === "error") sawError = true;
+        if (--pending === 0) { settled = true; resolve({ state: sawError ? "error" : "missing" }); }
+      });
+    }
+  });
+}
+
+function baseForms(word) {
+  const lemma = (typeof DefnLemma !== "undefined") ? DefnLemma : null;
+  if (!lemma) return [];
+  return lemma.candidates(word).slice(0, DEFN_MAX_BASE_FORMS);
+}
+
+// "missing" means every source answered and none had an entry.
+// "error" means at least one source never answered, so a miss is not proven.
+async function lookupDefinition(word) {
+  const deadline = Date.now() + DEFN_BUDGET_MS;
+  const forms = [word].concat(baseForms(word));
+  let sawError = false;
+
+  for (const form of forms) {
+    if (Date.now() > deadline) { sawError = true; break; }
+    const r = await firstEntry(DEFN_SOURCES.map(s => trySource(s, form)));
+    if (r.state === "ok") return r;
+    if (r.state === "error") sawError = true;
+  }
+  return { state: sawError ? "error" : "missing" };
+}
+
+function fetchDefinition(word) {
+  let p = DEFN_CACHE.get(word);
+  if (!p) {
+    p = lookupDefinition(word).catch(err => ({
+      state: "error",
+      message: String((err && err.message) || err),
+    }));
+    DEFN_CACHE.set(word, p);
+  }
+  return p;
+}
+
+function wiktionaryLink(word) {
+  return `<a class="defn-link" href="https://en.wiktionary.org/wiki/${encodeURIComponent(word)}"` +
+         ` target="_blank" rel="noopener">look it up on Wiktionary &#8599;</a>`;
 }
 
 function renderDefinition(result) {
@@ -240,32 +382,48 @@ function renderDefinition(result) {
     els.definition.innerHTML = "";
     return;
   }
-  els.definition.innerHTML = `<span class="defn-label">definition</span> <span class="defn-loading">looking up &ldquo;${w.toUpperCase()}&rdquo;&hellip;</span>`;
+  els.definition.innerHTML =
+    `<span class="defn-label">definition</span> ` +
+    `<span class="defn-loading">looking up &ldquo;${escapeHtml(w.toUpperCase())}&rdquo;&hellip;</span>`;
 
   fetchDefinition(w).then(entry => {
     if (clean(els.letters.value) !== w) return; // stale
+
     if (entry.state === "ok") {
-      const meanings = (entry.payload[0]?.meanings || []).slice(0, 3);
-      const phon = (entry.payload[0]?.phonetic || "").trim();
-      const blocks = meanings.map(m => {
-        const def = (m.definitions || [])[0];
-        if (!def) return "";
-        return `<div class="defn-row">
-          <span class="defn-pos">${m.partOfSpeech || ""}</span>
-          <span class="defn-text">${escapeHtml(def.definition)}</span>
-        </div>`;
-      }).join("");
+      const rows = entry.senses.map(s =>
+        `<div class="defn-row">
+          <span class="defn-pos">${escapeHtml(s.pos)}</span>
+          <span class="defn-text">${escapeHtml(s.text)}</span>
+        </div>`).join("");
+      const viaBase = entry.matched !== w
+        ? ` <span class="defn-src">base form ${escapeHtml(entry.matched.toUpperCase())}</span>`
+        : "";
       els.definition.innerHTML =
         `<span class="defn-label">definition</span>` +
-        (phon ? ` <span class="defn-phon">${escapeHtml(phon)}</span>` : "") +
-        `<div class="defn-list">${blocks || '<span class="defn-missing">(no definition body returned)</span>'}</div>`;
-    } else if (entry.state === "missing") {
-      els.definition.classList.add("missing");
-      els.definition.innerHTML = `<span class="defn-label">definition</span> <span class="defn-missing">no public definition found for &ldquo;${w.toUpperCase()}&rdquo;.</span>`;
-    } else {
-      els.definition.classList.add("error");
-      els.definition.innerHTML = `<span class="defn-label">definition</span> <span class="defn-missing">lookup failed.</span>`;
+        (entry.phonetic ? ` <span class="defn-phon">${escapeHtml(entry.phonetic)}</span>` : "") +
+        viaBase +
+        `<div class="defn-list">${rows}</div>` +
+        `<div class="defn-foot"><span class="defn-src">source: ${escapeHtml(entry.source)}</span></div>`;
+      return;
     }
+
+    if (entry.state === "missing") {
+      els.definition.classList.add("missing");
+      els.definition.innerHTML =
+        `<span class="defn-label">definition</span> ` +
+        `<span class="defn-missing">${escapeHtml(w.toUpperCase())} is legal in NWL2023, but no free ` +
+        `dictionary source has an entry for it. Game word lists include many words that general ` +
+        `dictionaries leave out.</span>` +
+        `<div class="defn-foot">${wiktionaryLink(w)}</div>`;
+      return;
+    }
+
+    els.definition.classList.add("error");
+    els.definition.innerHTML =
+      `<span class="defn-label">definition</span> ` +
+      `<span class="defn-missing">The definition sources did not answer. This says nothing about ` +
+      `${escapeHtml(w.toUpperCase())}; the verdict above is still correct.</span>` +
+      `<div class="defn-foot">${wiktionaryLink(w)}</div>`;
   });
 }
 
