@@ -552,6 +552,22 @@ footer.page-footer {
   font-style: italic;
 }
 .defn-text { color: var(--text); }
+.defn-src {
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  font-weight: 500;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.defn-foot { margin-top: .55rem; }
+.defn-link {
+  font-family: var(--font-mono);
+  font-size: .72rem;
+  letter-spacing: .06em;
+  color: var(--navy);
+  text-underline-offset: .2em;
+}
 
 @media (max-width: 560px) {
   .defn-row { grid-template-columns: 1fr; gap: .15rem; }
