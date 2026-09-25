@@ -278,8 +278,10 @@ function parseWiktionary(data) {
   const groups = (data && data.en) || [];
   const senses = [];
   for (const g of groups) {
-    const d = (g.definitions || [])[0];
-    if (!d || !d.definition) continue;
+    // Skip empty or markup-only senses; take the first one with text.
+    // Wiktionary can lead with an empty sense (RETINA did).
+    const d = (g.definitions || []).find(x => x && x.definition && stripMarkup(x.definition));
+    if (!d) continue;
     const text = stripMarkup(d.definition);
     if (text) senses.push({ pos: g.partOfSpeech || "", text });
     if (senses.length === 3) break;
